@@ -1,36 +1,43 @@
-const novelFire = {
+export default {
+  name: "NovelFire",
   baseUrl: "https://novelfire.net",
+  lang: "en",
 
   headers: {
     "User-Agent": "Mozilla/5.0",
   },
 
   // 🔍 SEARCH
-  search: async function (query) {
-    const res = await fetch(`${this.baseUrl}/search?keyword=${encodeURIComponent(query)}`, { headers: this.headers });
+  async search(query) {
+    const res = await fetch(`${this.baseUrl}/search?keyword=${encodeURIComponent(query)}`, {
+      headers: this.headers,
+    });
+
     const html = await res.text();
     const doc = new DOMParser().parseFromString(html, "text/html");
 
-    const items = [...doc.querySelectorAll("a[href*='/book/']")];
-
-    return items.map(el => ({
-      name: el.textContent.trim(),
-      url: el.href,
-    }));
+    return [...doc.querySelectorAll("a[href*='/book/']")]
+      .map(el => ({
+        name: el.textContent.trim(),
+        url: el.href,
+      }))
+      .filter(x => x.name);
   },
 
-  // 📚 DETAILS + CHAPTERS
-  detail: async function (url) {
+  // 📚 DETAILS + CHAPTER LIST
+  async detail(url) {
     const res = await fetch(url, { headers: this.headers });
     const html = await res.text();
     const doc = new DOMParser().parseFromString(html, "text/html");
 
-    const title = doc.querySelector("h1")?.textContent.trim() || "";
+    const title = doc.querySelector("h1")?.textContent.trim() || "No Title";
 
-    const chapters = [...doc.querySelectorAll("a[href*='chapter-']")].map(el => ({
-      name: el.textContent.trim(),
-      url: el.href,
-    }));
+    const chapters = [...doc.querySelectorAll("a[href*='chapter-']")]
+      .map(el => ({
+        name: el.textContent.trim(),
+        url: el.href,
+      }))
+      .filter(ch => ch.name);
 
     return {
       name: title,
@@ -39,20 +46,29 @@ const novelFire = {
   },
 
   // 📖 CHAPTER CONTENT
-  chapter: async function (url) {
+  async chapter(url) {
     const res = await fetch(url, { headers: this.headers });
     const html = await res.text();
     const doc = new DOMParser().parseFromString(html, "text/html");
 
-    // cleaner extraction
-    let content = doc.body.innerText;
+    // Try proper selectors first
+    let content =
+      doc.querySelector("#chapter-content") ||
+      doc.querySelector(".chapter-content") ||
+      doc.querySelector("article");
 
-    // remove junk (optional cleanup)
-    content = content.replace(/Table of Contents/g, "");
-    content = content.replace(/Next Chapter/g, "");
+    // fallback
+    if (!content) content = doc.body;
 
-    return content;
-  }
+    let text = content.innerText;
+
+    // clean junk
+    text = text
+      .replace(/Table of Contents/gi, "")
+      .replace(/Next Chapter/gi, "")
+      .replace(/Previous Chapter/gi, "")
+      .replace(/\n\s*\n/g, "\n\n");
+
+    return text.trim();
+  },
 };
-
-export default novelFire;
